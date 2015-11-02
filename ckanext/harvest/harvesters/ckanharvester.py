@@ -1,4 +1,5 @@
 import urllib2
+import dateutil
 
 from ckan.lib.base import c
 from ckan import model
@@ -180,6 +181,8 @@ class CKANHarvester(HarvesterBase):
         include_pkg_ids = get_pkg_ids_for_organizations(org_filter_include)
         exclude_pkg_ids = get_pkg_ids_for_organizations(org_filter_exclude)
 
+        only_new_datasets = self.config.get('only_new_datasets', False)
+
         if (previous_job and not previous_job.gather_errors and not len(previous_job.objects) == 0):
             if not self.config.get('force_all',False):
                 get_all_packages = False
@@ -202,7 +205,21 @@ class CKANHarvester(HarvesterBase):
                                 continue
 
                             revision = json.loads(content)
-                            package_ids = revision['packages']
+
+                            # Filter in only datasets created after last harvesting job
+                            if only_new_datasets:
+                                for package_id in revision['packages']:
+                                    url = base_rest_url + '/package/%s' % package_id
+                                    package_content = self._get_content(url)
+                                    package = json.loads(package_content)
+                                    creation_date = dateutil.parser.parse(package['metadata_created'])
+                                    # I'm not sure if I have to use > or >= here
+                                    print type(last_time)
+                                    print type(creation_date)
+                                    if creation_date > last_time:
+                                        package_ids.append(package_id)
+                            else:
+                                package_ids = revision['packages']
                     else:
                         log.info('No packages have been updated on the remote CKAN instance since the last harvest job')
                         return None
